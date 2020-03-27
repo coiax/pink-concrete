@@ -1,0 +1,17 @@
+-e git+https://github.com/coiax/anvil-parser@edeacb28e8970c9d9ad07efe434007c88307afe8#egg=anvil_parser
+certifi==2019.11.28
+cffi==1.13.2
+chardet==3.0.4
+colorama==0.4.3
+frozendict==1.2
+greenlet==0.4.13
+idna==2.9
+-e git+https://github.com/coiax/nbt@530e1d4f8fb71bbb4d32992509a9c67bedf88a31#egg=NBT
+pytz==2019.3
+readline==6.2.4.1
+requests==2.23.0
+six==1.14.0
+snakeviz==2.0.1
+tornado==6.0.4
+urllib3==1.25.8
+vmprof==0.4.15
