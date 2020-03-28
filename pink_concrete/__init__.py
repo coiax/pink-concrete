@@ -36,6 +36,16 @@ def top_down_until(chunkdict, x: int, z: int) -> typing.Iterator['Block']:
 
 AIR = anvil.Block.from_name('minecraft:air')
 
+def _air_chunk():
+    chunk = {}
+    for x in range(16):
+        for y in range(256):
+            for z in range(16):
+                chunk[x,y,z] = AIR
+    return chunk
+
+AIR_CHUNK = _air_chunk()
+
 
 def _chunk_dict(chunk: 'Chunk'):
     cdict = {}
@@ -44,7 +54,13 @@ def _chunk_dict(chunk: 'Chunk'):
     x = 0
     for section_index in range(16):
         section: typing.Optional['nbt.TAG_Compound']
-        section = chunk.get_section(section_index)
+        try:
+            section = chunk.get_section(section_index)
+        except KeyError as error:
+            if error.args[0] == "Tag Sections does not exist":
+                return AIR_CHUNK
+            else:
+                raise
 
         # The following section is to work around the early generator
         # exit in anvil/chunk.py:190
