@@ -131,7 +131,8 @@ def render_region(region_path: 'Path', image_path: 'Path', mtime: int):
             # 99% of the CPU time, so it really doesn't matter
             rgba = styling.block_stack_to_colour(block_stack)
 
-            pixels.putpixel((x_offset + x, z_offset + z), rgba)
+            # putpixel doesn't work on cpython for some reason???
+            pixels[x_offset + x, z_offset + z] = rgba
 
     information = {
         "version": VERSION,
