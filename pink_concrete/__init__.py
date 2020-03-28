@@ -18,7 +18,7 @@ from . import styling, stitch
 
 VERSION = 2
 
-def top_down_until(chunk: 'Chunk', x: int, z: int) -> typing.Iterator['Block']:
+def top_down_until(chunkdict, x: int, z: int) -> typing.Iterator['Block']:
     """Return an iterator of blocks in the chunk at x,z
     until the returned block is opaque, or there are no blocks left."""
 
@@ -27,17 +27,49 @@ def top_down_until(chunk: 'Chunk', x: int, z: int) -> typing.Iterator['Block']:
 
     y = 255
     while y > 0:
-        try:
-            block = chunk.get_block(x, y, z)
-        except KeyError as error:
-            if error.args[0] == 'Tag Sections does not exist':
-                return
-            else:
-                raise
+        block = chunkdict[x, y, z]
         yield block
         if styling.is_opaque(block.name()):
             break
         y -= 1
+
+
+AIR = anvil.Block.from_name('minecraft:air')
+
+
+def _chunk_dict(chunk: 'Chunk'):
+    cdict = {}
+    y = 0
+    z = 0
+    x = 0
+    for section_index in range(16):
+        section: typing.Optional['nbt.TAG_Compound']
+        section = chunk.get_section(section_index)
+
+        # The following section is to work around the early generator
+        # exit in anvil/chunk.py:190
+        if section is None or section.get("BlockStates") is None:
+            for i in range(16):
+                for j in range(y, y + 16):
+                    for k in range(16):
+                        cdict[i, j, k] = AIR
+            y += 16
+
+            continue
+
+        for block in chunk.stream_blocks(index=0, section=section):
+            cdict[x,y,z] = block
+            x += 1
+            if x % 16 == 0:
+                x = 0
+                z += 1
+
+                if z % 16 == 0:
+                    z = 0
+                    y += 1
+
+    return cdict
+
 
 def top_downs_in_chunk(
     chunk: 'Chunk'
@@ -45,9 +77,12 @@ def top_downs_in_chunk(
     """For a given chunk, return an iterable of the blocks, from top
     to bottom (until the block returned is either the last block,
     or opaque) for each of the internal x,z pairs."""
+
+    chunk_dict = _chunk_dict(chunk)
+
     for x in range(16):
         for z in range(16):
-            yield x, z, top_down_until(chunk, x, z)
+            yield x, z, top_down_until(chunk_dict, x, z)
 
 
 def chunks_in_region(region: 'Region') -> typing.Iterator['Chunk']:
