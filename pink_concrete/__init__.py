@@ -9,6 +9,7 @@ import multiprocessing
 import random
 
 import PIL.Image
+from PIL import UnidentifiedImageError
 from PIL.PngImagePlugin import PngInfo
 import anvil
 from tqdm import tqdm
@@ -64,7 +65,7 @@ def _skip(image_path: 'Path', mtime: int) -> bool:
     # Determine if the existing image can be reused
     try:
         existing = PIL.Image.open(image_path)
-    except FileNotFoundError:
+    except (FileNotFoundError, UnidentifiedImageError):
         return False
 
     try:
