@@ -43,7 +43,7 @@ def _get_styling():
         while len(cleaned) < 4:
             cleaned += (255,)
 
-        styling_json[key] = value
+        styling_json[key] = cleaned
 
     return styling_json
 
