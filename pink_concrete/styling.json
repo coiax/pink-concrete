@@ -63,7 +63,7 @@
 "minecraft:cyan_carpet": "minecraft:cyan_wool",
 "minecraft:cyan_wool": "#158890",
 "minecraft:dandelion": [255,255,0,255],
-"minecraft:dark_oak_leaves": "#304a1e",
+"minecraft:dark_oak_leaves": "#304a1e80",
 "minecraft:dark_oak_log": "#1b1306",
 "minecraft:dark_oak_planks": "#301e0e",
 "minecraft:dark_oak_sapling": "#105210",

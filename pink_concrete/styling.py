@@ -18,9 +18,12 @@ def _get_styling():
             r = int(value[1:3], 16)
             g = int(value[3:5], 16)
             b = int(value[5:7], 16)
+            try:
+                a = int(value[7:9], 16)
+            except ValueError:
+                a = 255
 
-            rgba = (r, g, b, 255)
-            styling_json[key] = rgba
+            styling_json[key] = (r, g, b, a)
 
     clean = False
     sanity = 1000
