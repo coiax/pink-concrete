@@ -117,11 +117,14 @@ def block_stack_to_colour(stack: typing.Iterable['Block']) -> RGBA:
         return colour
 
 @functools.lru_cache(maxsize=255)
-def style_of_block(block_name) -> RGBA:
+def style_of_block(
+    block_name,
+    default: typing.Any = (127, 127, 127, 255)
+) -> RGBA:
     try:
         return STYLEMAP[block_name]
     except KeyError:
         MISSING_STYLE.add(block_name)
 
-        return (127, 127, 127, 255)
+        return default
 
