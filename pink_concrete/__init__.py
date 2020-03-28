@@ -1,5 +1,7 @@
 from __future__ import generator_stop
 
+import sys
+import time
 import json
 import pathlib
 import typing
@@ -9,6 +11,7 @@ import random
 import PIL.Image
 from PIL.PngImagePlugin import PngInfo
 import anvil
+from tqdm import tqdm
 
 from . import styling, stitch
 
@@ -27,11 +30,11 @@ def top_down_until(chunk: 'Chunk', x: int, z: int) -> typing.Iterator['Block']:
             block = chunk.get_block(x, y, z)
         except KeyError as error:
             if error.args[0] == 'Tag Sections does not exist':
-                continue
+                return
             else:
                 raise
         yield block
-        if styling.is_opaque(block):
+        if styling.is_opaque(block.name()):
             break
         y -= 1
 
@@ -122,9 +125,15 @@ def render_region(region_path, image_filename: str, mtime: int):
 
     image.save(image_filename, 'PNG', pnginfo=pnginfo)
 
-    from pprint import pprint
-    pprint(styling.MISSING_STYLE)
+    if styling.MISSING_STYLE:
+        from pprint import pprint
+        pprint(styling.MISSING_STYLE)
 
+
+def _xz_from_string(str) -> typing.Tuple[int, int]:
+    assert str.count(".") == 3
+    r, x, z, extension = str.split(".")
+    return int(x), int(z)
 
 def main():
     import argparse
@@ -137,8 +146,24 @@ def main():
     parser.add_argument(
         '-j',
         '--jobs',
-        default=multiprocessing.cpu_count(),
+        nargs='?',
+        default=1,
+        const=multiprocessing.cpu_count(),
         type=int,
+        help=(
+            "The number of processes to use when rendering the map. "
+            "Default is 1 core, running the map renderer in a single "
+            "process. If specified without a number, uses the number "
+            "of CPU cores."
+        ),
+    )
+    parser.add_argument(
+        '--job-order',
+        help=(
+            "What order the jobs should run in, such as smallest region "
+            "or closest region to the origin, or random."
+        ),
+        default=None,
     )
     parser.add_argument(
         '--stitch-only',
@@ -166,21 +191,64 @@ def main():
 
         jobs.append((region_path, image_name, mtime))
 
-    random.shuffle(jobs)
+    def closest_to_zero(tup):
+        # Check the regions closest to 0,0 first
+        region_path, image_name, mtime = tup
+        x, z = _xz_from_string(str(region_path.name))
+        return x**2 + z**2
+
+    def smallest(tup):
+        # Check the smallest (file-size) regions first
+        region_path, image_name, mtime = tup
+        return region_path.stat().st_size
+
+    def random_order(tup):
+        return random.random()
+
+    if args.job_order == 'closest_to_zero':
+        jobs.sort(key=closest_to_zero)
+    elif args.job_order == 'smallest':
+        jobs.sort(key=closest_to_zero)
+    elif args.job_order == 'random':
+        jobs.sort(key=random_order)
+    elif args.job_order is not None:
+        print("Unrecognised job order: ", args.job_order)
+        sys.exit(1)
 
     if not args.stitch_only:
-        if args.jobs > 1:
-            pool = multiprocessing.Pool(args.jobs)
+        with tqdm(total=len(jobs)) as pbar:
+            if args.jobs > 1:
+                with multiprocessing.Pool(args.jobs) as pool:
+                    results = []
+                    for arguments in jobs:
+                        results.append(pool.apply_async(
+                            render_region,
+                            arguments,
+                        ))
 
-            pool.starmap(render_region, jobs)
-        else:
-            for arguments in jobs:
-                render_region(*arguments)
+                    while results:
+                        for result in list(results):
+                            if result.ready():
+                                pbar.update()
+                                results.remove(result)
+                        pbar.refresh()
+                        time.sleep(1)
+
+                    pool.close()
+                    pool.join()
+
+            else:
+                for arguments in jobs:
+                    render_region(*arguments)
+                    pbar.update()
 
     mapmap = {}
 
-    for filename in image_files:
-        r, x, z, png = filename.split(".")
-        mapmap[int(x),int(z)] = PIL.Image.open(filename)
+    sanity_zone = 10
+    for region_path, image_name, mtime in jobs:
+        x, z = _xz_from_string(image_name)
+        if abs(x) > sanity_zone or abs(z) > sanity_zone:
+            continue
+        mapmap[x, z] = image_name
 
     stitch.stitch(mapmap)

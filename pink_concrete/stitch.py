@@ -5,7 +5,7 @@ import PIL.Image
 XZ = typing.Tuple[int, int]
 
 
-def stitch(mapmap: typing.Mapping[XZ, typing.Any]):
+def stitch(mapmap: typing.Mapping[XZ, str]):
     max_x = max(xz[0] for xz in mapmap)
     max_z = max(xz[1] for xz in mapmap)
     min_x = min(xz[0] for xz in mapmap)
@@ -17,16 +17,22 @@ def stitch(mapmap: typing.Mapping[XZ, typing.Any]):
     atlas = PIL.Image.new("RGBA", (x_width, z_width))
     for z in range(min_z, max_z + 1):
         for x in range(min_x, max_x + 1):
-            try:
-                piece = mapmap[x,z]
-            except KeyError:
+            if (x,z) not in mapmap:
                 continue
+
+            image_filename = mapmap[x,z]
             x_offset = x - min_x
             z_offset = z - min_z
 
-            atlas.paste(piece, (x_offset * 512, z_offset * 512))
+            try:
+                with PIL.Image.open(image_filename) as segment:
+                    atlas.paste(segment, (x_offset * 512, z_offset * 512))
+            except FileNotFoundError:
+                continue
 
     bbox = atlas.getbbox()
 
     cropped = atlas.crop(bbox)
+    atlas.close()
+
     cropped.save("atlas.png")
