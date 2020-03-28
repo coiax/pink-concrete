@@ -1,5 +1,6 @@
 import typing
 
+import pathlib
 import PIL.Image
 
 XZ = typing.Tuple[int, int]
@@ -20,12 +21,12 @@ def stitch(mapmap: typing.Mapping[XZ, str]):
             if (x,z) not in mapmap:
                 continue
 
-            image_filename = mapmap[x,z]
+            image_path = mapmap[x,z]
             x_offset = x - min_x
             z_offset = z - min_z
 
             try:
-                with PIL.Image.open(image_filename) as segment:
+                with PIL.Image.open(image_path) as segment:
                     atlas.paste(segment, (x_offset * 512, z_offset * 512))
             except FileNotFoundError:
                 continue
@@ -35,4 +36,8 @@ def stitch(mapmap: typing.Mapping[XZ, str]):
     cropped = atlas.crop(bbox)
     atlas.close()
 
-    cropped.save("atlas.png")
+    parent = image_path.parent
+
+    atlas_path = parent / "atlas.png"
+
+    cropped.save(atlas_path)
