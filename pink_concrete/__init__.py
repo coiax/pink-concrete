@@ -32,7 +32,13 @@ def get_chunk_stacks(
     y = 255
     for section_index in reversed(range(16)):
         section: typing.Optional['nbt.TAG_Compound']
-        section = chunk.get_section(section_index)
+        try:
+            section = chunk.get_section(section_index)
+        except KeyError as error:
+            if error.args[0] == "Tag Sections does not exist":
+                return chunk_stacks
+            else:
+                raise
         section_stacks = defaultdict(list)
 
         assert y >= 15
