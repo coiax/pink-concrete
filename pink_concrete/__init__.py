@@ -203,7 +203,9 @@ def _make_jobs(
 ) -> typing.List['Job']:
     jobs = []
 
-    for region_path in region_folder.glob("*.mca"):
+    paths = list(region_folder.glob("*.mca"))
+
+    for region_path in tqdm(paths, desc="Determining rendering jobs"):
         image_name = region_path.name[:-4] + ".png"
         image_path = output_folder / image_name
 
@@ -270,8 +272,27 @@ def main():
             "\"stitching\" together of the final image."
         ),
     )
+    parser.add_argument(
+        '-x',
+        '--x-range',
+        help="X range to generate final image for.",
+        nargs=2,
+        default=[-10, 10],
+        type=int,
+    )
+    parser.add_argument(
+        "-z",
+        "--z-range",
+        help="Z range to generate final image for.",
+        nargs=2,
+        default=[-10, 10],
+        type=int,
+    )
 
     args = parser.parse_args()
+
+    x_range = sorted(args.x_range)
+    z_range = sorted(args.z_range)
 
     region_folder = args.folder
     output_folder = args.output
@@ -313,7 +334,7 @@ def main():
         sys.exit(1)
 
     if not args.stitch_only:
-        with tqdm(total=len(jobs)) as pbar:
+        with tqdm(total=len(jobs), desc="Rendering regions") as pbar:
             if args.jobs > 1:
                 with multiprocessing.Pool(args.jobs) as pool:
                     results = []
@@ -344,16 +365,14 @@ def main():
 
     mapmap = {}
 
-    # Need to cap the maximum number of regions we include
-    # in the final stitching, otherwise the final image is too large
-    # and OOMs my machine
-    sanity_zone = 10
+    min_x, max_x = x_range
+    min_z, max_z = z_range
+
     for image_path in output_folder.glob("*.png"):
         if image_path.name.count(".") != 3:
             continue
         x, z = _xz_from_string(image_path.name)
-        if abs(x) > sanity_zone or abs(z) > sanity_zone:
-            continue
-        mapmap[x, z] = image_path
+        if min_x <= x <= max_x and min_z <= z <= max_z:
+            mapmap[x, z] = image_path
 
     stitch.stitch(mapmap)
