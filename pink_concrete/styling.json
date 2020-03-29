@@ -1,9 +1,11 @@
 {
+"minecraft:acacia_fence": "minecraft:acacia_planks",
 "minecraft:acacia_leaves": "minecraft:leaves",
 "minecraft:acacia_log": "#713c27",
 "minecraft:acacia_planks": "#ba6337",
 "minecraft:acacia_slab": "minecraft:acacia_planks",
 "minecraft:acacia_stairs": "minecraft:acacia_planks",
+"minecraft:acacia_wood": "#4e4942",
 "minecraft:air": [0,0,0,0],
 "minecraft:allium": "#d2a6f6",
 "minecraft:andesite": [136, 136, 140, 255],
