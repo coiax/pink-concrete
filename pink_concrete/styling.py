@@ -70,6 +70,17 @@ def is_opaque(block_name) -> bool:
         return style[3] == 255
 
 
+@functools.lru_cache(maxsize=255)
+def is_translucent(block_name) -> bool:
+    try:
+        style = STYLEMAP[block_name]
+    except KeyError:
+        MISSING_STYLE.add(block_name)
+        return False
+    else:
+        return style[3] < 255 and style[3] > 0
+
+
 
 
 def _scale_255_to_1(rgba: RGBA) -> FractionalRGBA:

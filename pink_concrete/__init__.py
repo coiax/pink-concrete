@@ -7,6 +7,7 @@ import pathlib
 import typing
 import multiprocessing
 import random
+import collections
 
 import PIL.Image
 from PIL import UnidentifiedImageError
@@ -18,63 +19,51 @@ from . import styling, stitch
 
 VERSION = 2
 
-def top_down_until(chunkdict, x: int, z: int) -> typing.Iterator['Block']:
-    """Return an iterator of blocks in the chunk at x,z
-    until the returned block is opaque, or there are no blocks left."""
-
-    assert 0 <= x <= 15
-    assert 0 <= z <= 15
+def get_chunk_stacks(
+    chunk: 'Chunk'
+)-> typing.Dict[typing.Tuple[int, int], typing.Iterator['Block']]:
+    """For a given chunk generate a dict of translucent and the
+    top opaque blocks for each of the internal x,z pairs"""
+    # Default dict that lets us skip completed block stacks
+    top_found = collections.defaultdict(int)
+    complete_set = set()
+    chunk_stacks = collections.defaultdict(list)
 
     y = 255
-    while y > 0:
-        block = chunkdict[x, y, z]
-        yield block
-        if styling.is_opaque(block.name()):
-            break
-        y -= 1
-
-
-AIR = anvil.Block.from_name('minecraft:air')
-
-def _air_chunk():
-    chunk = {}
-    for x in range(16):
-        for y in range(256):
-            for z in range(16):
-                chunk[x,y,z] = AIR
-    return chunk
-
-AIR_CHUNK = _air_chunk()
-
-
-def _chunk_dict(chunk: 'Chunk'):
-    cdict = {}
-    y = 0
-    z = 0
-    x = 0
-    for section_index in range(16):
+    for section_index in reversed(range(16)):
         section: typing.Optional['nbt.TAG_Compound']
         try:
             section = chunk.get_section(section_index)
         except KeyError as error:
             if error.args[0] == "Tag Sections does not exist":
-                return AIR_CHUNK
+                return chunk_stacks
             else:
                 raise
+        section_stacks = collections.defaultdict(list)
+
+        assert y >= 15
 
         # The following section is to work around the early generator
         # exit in anvil/chunk.py:190
         if section is None or section.get("BlockStates") is None:
-            for i in range(16):
-                for j in range(y, y + 16):
-                    for k in range(16):
-                        cdict[i, j, k] = AIR
-            y += 16
-
+            y -= 16
             continue
 
+        x = 0
+        z = 0
+        local_y = y - 16
         for block in chunk.stream_blocks(index=0, section=section):
-            cdict[x,y,z] = block
+            # As we are working from the top, only process if an opaque
+            # block has not been found or is below (so in current section)
+            if top_found[x, z] < local_y:
+                if styling.is_opaque(block.name()):
+                    top_found[x, z] = local_y
+                    complete_set.add((x, z))
+ 
+                    section_stacks[x, z].append(block)
+                elif styling.is_translucent(block.name()):
+                    section_stacks[x, z].append(block)
+
             x += 1
             if x % 16 == 0:
                 x = 0
@@ -82,24 +71,16 @@ def _chunk_dict(chunk: 'Chunk'):
 
                 if z % 16 == 0:
                     z = 0
-                    y += 1
+                    local_y += 1
 
-    return cdict
-
-
-def top_downs_in_chunk(
-    chunk: 'Chunk'
-)-> typing.Iterator[typing.Tuple[int, int, typing.Iterator['Block']]]:
-    """For a given chunk, return an iterable of the blocks, from top
-    to bottom (until the block returned is either the last block,
-    or opaque) for each of the internal x,z pairs."""
-
-    chunk_dict = _chunk_dict(chunk)
-
-    for x in range(16):
-        for z in range(16):
-            yield x, z, top_down_until(chunk_dict, x, z)
-
+        # Add section to total stack
+        for x,z in section_stacks:
+            chunk_stacks[x, z].extend(reversed(section_stacks[x, z]))
+        y -= 16
+        if len(complete_set) == 256:
+            return chunk_stacks
+    # Return something anyway
+    return chunk_stacks
 
 def chunks_in_region(region: 'Region') -> typing.Iterator['Chunk']:
     for z in range(32):
@@ -177,11 +158,12 @@ def render_region(region_path: 'Path', image_path: 'Path', mtime: int):
         x_offset = (chunk_x - base_x) * 16
         z_offset = (chunk_z - base_z) * 16
 
-        for x, z, block_stack in top_downs_in_chunk(chunk):
+        stackdict = get_chunk_stacks(chunk)
+        for x, z in stackdict:
             # Although PIL advises against raw pixel manipulation
             # currently the calculation of the pixel's colour is
             # 99% of the CPU time, so it really doesn't matter
-            rgba = styling.block_stack_to_colour(block_stack)
+            rgba = styling.block_stack_to_colour(stackdict[x,z])
 
             # putpixel doesn't work on cpython for some reason???
             pixels[x_offset + x, z_offset + z] = rgba
