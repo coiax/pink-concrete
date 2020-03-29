@@ -7,7 +7,7 @@ import pathlib
 import typing
 import multiprocessing
 import random
-from collections import defaultdict
+import collections
 
 import PIL.Image
 from PIL import UnidentifiedImageError
@@ -21,13 +21,13 @@ VERSION = 2
 
 def get_chunk_stacks(
     chunk: 'Chunk'
-)-> typing.Dict[typing.Tuple[int,int], typing.Iterator['Block']]:
-    """For a given chunk genrate a dict of translucent and the
+)-> typing.Dict[typing.Tuple[int, int], typing.Iterator['Block']]:
+    """For a given chunk generate a dict of translucent and the
     top opaque blocks for each of the internal x,z pairs"""
-    #default dict that lets us skip completed block stacks
-    top_found = defaultdict(int)
+    # Default dict that lets us skip completed block stacks
+    top_found = collections.defaultdict(int)
     complete_set = set()
-    chunk_stacks = defaultdict(list)
+    chunk_stacks = collections.defaultdict(list)
 
     y = 255
     for section_index in reversed(range(16)):
@@ -39,7 +39,7 @@ def get_chunk_stacks(
                 return chunk_stacks
             else:
                 raise
-        section_stacks = defaultdict(list)
+        section_stacks = collections.defaultdict(list)
 
         assert y >= 15
 
@@ -53,16 +53,16 @@ def get_chunk_stacks(
         z = 0
         local_y = y - 16
         for block in chunk.stream_blocks(index=0, section=section):
-            #as we are working from the top, only process if an opaque
-            #block has not been found or is below (so in current section)
-            if top_found[x,z] < local_y:
+            # As we are working from the top, only process if an opaque
+            # block has not been found or is below (so in current section)
+            if top_found[x, z] < local_y:
                 if styling.is_opaque(block.name()):
-                    top_found[x,z] = local_y
-                    complete_set.add((x,z))
+                    top_found[x, z] = local_y
+                    complete_set.add((x, z))
  
-                    section_stacks[x,z].append(block)
+                    section_stacks[x, z].append(block)
                 elif styling.is_translucent(block.name()):
-                    section_stacks[x,z].append(block)
+                    section_stacks[x, z].append(block)
 
             x += 1
             if x % 16 == 0:
@@ -73,13 +73,13 @@ def get_chunk_stacks(
                     z = 0
                     local_y += 1
 
-        #add section to total stack
+        # Add section to total stack
         for x,z in section_stacks:
-            chunk_stacks[x,z].extend(reversed(section_stacks[x,z]))
+            chunk_stacks[x, z].extend(reversed(section_stacks[x, z]))
         y -= 16
         if len(complete_set) == 256:
             return chunk_stacks
-    #return something anyway
+    # Return something anyway
     return chunk_stacks
 
 def chunks_in_region(region: 'Region') -> typing.Iterator['Chunk']:
