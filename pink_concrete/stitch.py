@@ -36,8 +36,13 @@ def stitch(mapmap: typing.Mapping[XZ, str]):
     cropped = atlas.crop(bbox)
     atlas.close()
 
+    # The original c10t maps were rotated like this, may as well
+    # make this the default rotation for now.
+    final = cropped.rotate(270)
+    cropped.close()
+
     parent = image_path.parent
 
     atlas_path = parent / "atlas.png"
 
-    cropped.save(atlas_path)
+    final.save(atlas_path)

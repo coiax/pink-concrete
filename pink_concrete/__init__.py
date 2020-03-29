@@ -16,8 +16,11 @@ import anvil
 from tqdm import tqdm
 
 from . import styling, stitch
+from .mtime import max_mtime_from_region
 
-VERSION = 2
+# Version of metadata stored in PNG images, increment
+# when non-compatible changes are made
+VERSION = 3
 
 def get_chunk_stacks(
     chunk: 'Chunk'
@@ -111,28 +114,25 @@ def _skip(image_path: 'Path', mtime: int) -> bool:
         return False
 
     try:
-        version = information['version']
-        stored_mtime = information['mtime']
-        missing = information['missing']
+        version = information["version"]
+        missing = information["missing"]
+        stored_mtime = information["mtime"]
     except KeyError:
-        return False
-
-    if missing:
         return False
 
     if version != VERSION:
         return False
 
-    if mtime != stored_mtime:
+    if missing:
+        return False
+
+    if mtime > stored_mtime:
         return False
 
     return True
 
 
 def render_region(region_path: 'Path', image_path: 'Path', mtime: int):
-    if _skip(image_path, mtime):
-        return
-
     # We don't want any previous missing blocks from previous renders
     # being included in this region
     styling.MISSING_STYLE.clear()
@@ -189,6 +189,36 @@ def _xz_from_string(str) -> typing.Tuple[int, int]:
     assert str.count(".") == 3
     r, x, z, extension = str.split(".")
     return int(x), int(z)
+
+
+class Job(typing.NamedTuple):
+    region_path: 'Path'
+    image_path: 'Path'
+    mtime: int
+
+
+def _make_jobs(
+    region_folder: 'Path',
+    output_folder: 'Path',
+) -> typing.List['Job']:
+    jobs = []
+
+    for region_path in region_folder.glob("*.mca"):
+        image_name = region_path.name[:-4] + ".png"
+        image_path = output_folder / image_name
+
+        with open(region_path, 'rb') as f:
+            # Read first 2KB header of region file
+            header = f.read(8192)
+
+        mtime = max_mtime_from_region(header)
+
+        if _skip(image_path, mtime):
+            continue
+
+        jobs.append(Job(region_path, image_path, mtime))
+
+    return jobs
 
 def main():
     import argparse
@@ -247,22 +277,16 @@ def main():
     output_folder = args.output
 
     assert region_folder.is_dir()
-    assert output_folder.is_dir()
+
+    try:
+        output_folder.mkdir(exist_ok=True)
+    except FileExistsError:
+        print("Bad destination, must be folder.", file=sys.stderr)
+        sys.exit(1)
+
     assert args.jobs >= 1
 
-    region_paths = []
-
-    for path in region_folder.glob("*.mca"):
-        mtime = int(path.stat().st_mtime)
-        region_paths.append((mtime, path))
-
-    jobs = []
-
-    for mtime, region_path in region_paths:
-        image_name = region_path.name.replace(".mca", ".png")
-        image_path = args.output / image_name
-
-        jobs.append((region_path, image_path, mtime))
+    jobs = _make_jobs(region_folder, output_folder)
 
     def closest_to_zero(tup):
         # Check the regions closest to 0,0 first
@@ -275,17 +299,17 @@ def main():
         region_path, image_path, mtime = tup
         return region_path.stat().st_size
 
-    def random_order(tup):
-        return random.random()
-
     if args.job_order == 'closest_to_zero':
         jobs.sort(key=closest_to_zero)
+
     elif args.job_order == 'smallest':
-        jobs.sort(key=closest_to_zero)
+        jobs.sort(key=smallest)
+
     elif args.job_order == 'random':
-        jobs.sort(key=random_order)
+        random.shuffle(jobs)
+
     elif args.job_order is not None:
-        print("Unrecognised job order: ", args.job_order)
+        print("Unrecognised job order: ", args.job_order, file=sys.stderr)
         sys.exit(1)
 
     if not args.stitch_only:
@@ -324,7 +348,9 @@ def main():
     # in the final stitching, otherwise the final image is too large
     # and OOMs my machine
     sanity_zone = 10
-    for region_path, image_path, mtime in jobs:
+    for image_path in output_folder.glob("*.png"):
+        if image_path.name.count(".") != 3:
+            continue
         x, z = _xz_from_string(image_path.name)
         if abs(x) > sanity_zone or abs(z) > sanity_zone:
             continue
