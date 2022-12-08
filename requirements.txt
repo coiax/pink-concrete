@@ -1,5 +1,5 @@
 -e git+https://github.com/coiax/anvil-parser@edeacb28e8970c9d9ad07efe434007c88307afe8#egg=anvil_parser
-certifi==2019.11.28
+certifi==2022.12.7
 cffi==1.13.2
 chardet==3.0.4
 colorama==0.4.3
